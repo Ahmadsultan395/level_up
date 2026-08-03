@@ -1,0 +1,55 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply bg-white text-dark antialiased;
+}
+
+::selection {
+  @apply bg-primary/40;
+}
+
+/* Rich text (TipTap output + display) styling */
+.prose h2 {
+  @apply mt-4 mb-2 text-xl font-bold text-dark;
+}
+.prose p {
+  @apply mb-3 leading-relaxed;
+}
+.prose ul {
+  @apply mb-3 list-disc pl-5;
+}
+.prose ol {
+  @apply mb-3 list-decimal pl-5;
+}
+.prose blockquote {
+  @apply border-l-4 border-primary pl-4 italic text-dark-300;
+}
+.prose a {
+  @apply text-primary underline;
+}
+
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  @apply text-dark-200;
+}
+
+/* Custom scrollbar for a premium feel */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  @apply rounded-full bg-dark-100;
+}
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-primary;
+}
