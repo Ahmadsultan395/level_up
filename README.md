@@ -124,3 +124,4 @@ Currently the seed script creates one `superadmin`. To add more, either:
 - Insert directly into the `users` collection with a bcrypt-hashed password, or
 - Build a small "Manage Admins" page later using the same CRUD pattern as Team/Services (the `role` field is already schema-ready for `superadmin` / `admin` / `editor`).
 # SKY_WAY
+# level_up
