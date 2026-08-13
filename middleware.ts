@@ -1,40 +1,32 @@
-import { NextRequest, NextResponse } from "next/server";
-import { COOKIE_NAME } from "@/lib/authConstants";
+import { withAuth } from 'next-auth/middleware';
+import { NextResponse } from 'next/server';
 
-/**
- * IMPORTANT: Middleware runs on the Edge Runtime. `jsonwebtoken` and
- * `bcryptjs` are NOT Edge-compatible (they rely on Node.js `crypto`/`Buffer`
- * APIs), and importing anything from "@/lib/auth" here would pull those
- * packages into the Edge bundle even if unused. That's why we import
- * COOKIE_NAME from the dependency-free "@/lib/authConstants" instead.
- *
- * This middleware only does a lightweight "does the auth cookie exist"
- * check. The actual JWT signature/expiry verification happens server-side
- * in Node.js runtime: `getSession()` in the dashboard layout, and
- * `requireAuth()` in API routes.
- */
-export function middleware(req: NextRequest) {
-  const token = req.cookies.get(COOKIE_NAME)?.value;
+export default withAuth(
+  function middleware(req) {
+    const { pathname } = req.nextUrl;
+    const token = req.nextauth.token;
 
-  const isDashboard = req.nextUrl.pathname.startsWith("/dashboard");
-  const isLogin = req.nextUrl.pathname.startsWith("/login");
+    // Admin panel: only admin / superadmin roles allowed
+    if (pathname.startsWith('/admin')) {
+      if (token?.role !== 'admin' && token?.role !== 'superadmin') {
+        return NextResponse.redirect(new URL('/login?callbackUrl=' + pathname, req.url));
+      }
+    }
 
-  if (isDashboard && !token) {
-    const url = req.nextUrl.clone();
-    url.pathname = "/login";
-    url.searchParams.set("redirect", req.nextUrl.pathname);
-    return NextResponse.redirect(url);
+    // Customer dashboard: any authenticated user allowed
+    return NextResponse.next();
+  },
+  {
+    callbacks: {
+      // Just require *a* valid token here; role-specific checks happen above.
+      authorized: ({ token }) => !!token,
+    },
+    pages: {
+      signIn: '/login',
+    },
   }
-
-  if (isLogin && token) {
-    const url = req.nextUrl.clone();
-    url.pathname = "/dashboard";
-    return NextResponse.redirect(url);
-  }
-
-  return NextResponse.next();
-}
+);
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/login"],
+  matcher: ['/dashboard/:path*', '/admin/:path*'],
 };

@@ -1,127 +1,255 @@
-# Digital Agency CMS
+# The Barber Co. — Full Platform
 
-Full-stack Next.js 14 (App Router) + MongoDB digital agency website with a built-in admin dashboard (mini CMS). Every content section — Hero, Services, Projects, Jobs, Team, About, Why Choose Us, Process — is editable from the dashboard, and every description field uses a rich text editor (TipTap).
+**Status: All 20 build steps complete.** Public website, booking + payment engine,
+customer dashboard, and the full admin panel are all implemented and wired
+to real data — see the build plan below for what each step covered.
 
-**اردو نوٹ:** نیچے setup steps دیے گئے ہیں۔ بس `.env.local` بنائیں، MongoDB چلائیں، اور `npm install && npm run dev` کریں۔
-
----
+Premium barbershop booking platform: public website, customer dashboard, and
+admin panel. Built with Next.js (App Router) + TypeScript + MongoDB.
 
 ## Tech Stack
+- **Framework:** Next.js 14 (App Router), TypeScript
+- **Database:** MongoDB + Mongoose
+- **Auth:** NextAuth.js
+- **Media:** Cloudinary
+- **Payments:** Manual confirmation (Bank Transfer / EasyPaisa / JazzCash / Cash) — no payment gateway
+- **Email:** Nodemailer
+- **Styling:** Tailwind CSS, driven entirely by CSS variables in
+  `src/styles/globals.css` (Premium Dark + Gold theme — see that file for
+  the full token system. No hardcoded colors anywhere in the codebase.)
 
-- **Frontend:** Next.js 14 (App Router), TypeScript, Tailwind CSS, Formik + Yup, TipTap rich text editor
-- **Backend:** Next.js Route Handlers (API routes), MongoDB + Mongoose
-- **Auth:** JWT stored in an httpOnly cookie, role-ready (`superadmin` / `admin` / `editor`)
-- **Uploads:** Local filesystem (`/public/uploads`) via `/api/upload` — swap for S3/Cloudinary later if needed
+## Data Models
+All Mongoose schemas live in `src/models/` (barrel-exported from
+`src/models/index.ts`). Every model that's ever shown on the public site
+has a `status: 'active' | 'inactive'` field; every model that can be
+submitted by a non-admin user additionally has
+`moderationStatus: 'pending' | 'approved' | 'rejected'` — matching the
+cross-cutting checklist in the specification.
 
-## Features
+| Model | Purpose |
+|---|---|
+| `User` | Customers + Admins + Superadmins (role-based) |
+| `Category` | Shared categories for services / blog / gallery |
+| `Service` | Individual services |
+| `Package` | Bundles of services |
+| `Barber` | Barber profiles, working hours, vacations, breaks |
+| `Appointment` | Bookings, status flow Pending→...→No Show |
+| `Review` | Customer reviews (with photos, moderated) |
+| `Testimonial` | Curated/submitted testimonials |
+| `Blog` | Blog posts with SEO fields |
+| `GalleryImage` | Gallery photos (admin or customer submitted) |
+| `BeforeAfter` | Before/after photo pairs |
+| `NewsletterSubscriber` | Email subscribers |
+| `ContactMessage` | Contact form submissions + reply thread |
+| `Payment` | Transaction records — created only on success |
+| `Invoice` | Generated from a successful payment |
+| `Expense` | Business expenses for reports |
+| `Coupon` | Discount codes |
+| `Notification` | Email/SMS/in-app notifications |
+| `ActivityLog` | Admin audit trail |
+| `Banner` | Hero/homepage/promo banners |
+| `Faq` | FAQ entries |
+| `EmailTemplate` | Editable transactional email templates |
+| `SiteSettings` | Singleton: CMS content, SEO defaults, contact info, currency/tax |
 
-- Public site: Home, Services, Projects (+ filter/search/pagination), Project detail, Jobs (+ filter/search), Job detail, Job apply (CV upload), Team, About, Contact
-- Admin dashboard: Hero, Services, Projects, Jobs, Team, Applications (CV download), Contact Messages, Settings (logo, contact info, socials, footer, About content, Why Choose Us, Process)
-- Rich text editor (TipTap) on every description-type field, both public rendering and admin editing
-- Reusable CRUD API factory (`lib/crudFactory.ts`) — list/create/read/update/delete logic is written once and reused for Services, Projects, Jobs, Team, Testimonials
-- Reusable `DataTable`, `Modal`, `useCrud` hook — admin CRUD pages don't duplicate fetch/table logic
-- SEO metadata per page, loading skeletons, toast notifications, empty states, responsive design, protected `/dashboard` routes via middleware
+## Reusable DataTable System
+Every list/table in the app — admin, customer dashboard, or public listing
+— is built from the same pieces, so pagination/search/filter/sort/bulk
+actions/Active-Inactive/Approve-Reject behave identically everywhere
+(spec section 17):
 
----
+- `src/lib/list-query.ts` → `buildListResponse()` — server-side helper every
+  list API route calls to get consistent pagination/search/filter/sort.
+- `src/hooks/useDataTable.ts` — client hook that keeps page/pageSize/
+  search/filters/sort/selection in the URL (shareable, back-button-safe).
+- `src/hooks/useListData.ts` — fetches from a `buildListResponse`-powered
+  endpoint using the state from `useDataTable`.
+- `src/components/shared/DataTable.tsx` — the table itself: sorting,
+  row selection, bulk-action bar, loading/empty/error states, pagination.
+- `src/components/shared/{SearchInput,Filters,Pagination}.tsx` — toolbar pieces.
+- `src/components/shared/StatusToggle.tsx` — the Active/Inactive switch used
+  on every publicly-visible entity.
+- `src/components/shared/ApproveRejectActions.tsx` — Approve/Reject buttons
+  (with a reject-reason modal) used on every user-submitted entity.
 
-## 1. Setup
+**Usage pattern for any admin list page:**
+```tsx
+'use client';
+const table = useDataTable();
+const { data, pagination, isLoading, error, refetch } = useListData<IBarber>({
+  endpoint: '/api/admin/barbers',
+  page: table.page, pageSize: table.pageSize, search: table.search,
+  sortBy: table.sortBy, sortOrder: table.sortOrder, filters: table.filters,
+});
 
+<DataTable
+  columns={columns}
+  data={data}
+  isLoading={isLoading}
+  error={error}
+  onRetry={refetch}
+  page={pagination.page}
+  totalPages={pagination.totalPages}
+  totalItems={pagination.totalItems}
+  pageSize={pagination.pageSize}
+  onPageChange={table.setPage}
+  onPageSizeChange={table.setPageSize}
+  sortBy={table.sortBy}
+  sortOrder={table.sortOrder}
+  onSort={table.setSort}
+  selectable
+  selectedIds={table.selectedIds}
+  onToggleSelect={table.toggleSelected}
+  onToggleSelectAll={table.toggleSelectAll}
+  toolbar={<SearchInput value={table.search} onChange={table.setSearch} />}
+/>
+```
+And the matching API route:
+```ts
+// src/app/api/admin/barbers/route.ts
+export async function GET(req: Request) {
+  await requireAdmin();
+  await connectDB();
+  const query = parseListQuery(new URL(req.url).searchParams);
+  const result = await buildListResponse(Barber, query, {
+    filterFields: ['status'],
+    searchFields: ['name', 'bio'],
+    defaultSortBy: 'createdAt',
+  });
+  return NextResponse.json(result);
+}
+```
+This exact pattern is reused for every module in Steps 5–20 — nothing
+bespoke per module.
+
+## Payment & Invoice Flow (Manual — no payment gateway)
+This project uses **manual payment confirmation** instead of a card gateway:
+Bank Transfer, EasyPaisa, JazzCash, or Cash on arrival.
+
+1. Booking (`/dashboard/book`) creates the `Appointment` as `pending` — **no financial record is created yet** (spec finance rule).
+2. `/dashboard/book/payment/[id]` shows the shop's bank/EasyPaisa/JazzCash details (set by the admin in **Admin → Website Content → Payment Methods**). The customer either:
+   - sends the money from their own banking/EasyPaisa/JazzCash app, then enters a transaction reference and/or uploads a payment screenshot, **or**
+   - chooses "Pay in Person (Cash)" and settles at the shop.
+3. This creates a `Payment` with `status: pending` via `/api/payments/manual` and emails the admin inbox to review it.
+4. The admin reviews the submission (including the screenshot, if any) in **Admin → Payments** and clicks **Confirm** once they've verified the money actually arrived (or received the cash in person).
+5. `confirmManualPayment()` (`src/lib/manual-payment.ts`) then — and only then — marks the `Payment` as `paid`, generates a sequential `Invoice` (`INV-YYYY-00001`), and flips the `Appointment` to `confirmed`, exactly matching the spec's finance rule that financial records are created only after a payment succeeds.
+6. Invoices are downloadable as PDF via `/api/invoices/[id]/download` (owner or admin only).
+
+Refunds work the same way: **Admin → Payments → Refund** records the refund in the finance data; the admin still has to physically return the cash or send the money back themselves, since there's no gateway to do it automatically.
+
+## Getting Started
 ```bash
-# 1. Install dependencies
 npm install
-
-# 2. Copy environment variables
-cp .env.example .env.local
-# then edit .env.local:
-#   MONGODB_URI      -> mongodb://127.0.0.1:27017/digital-agency (local) or your Atlas URI
-#   JWT_SECRET        -> any long random string
-#   SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD -> your first admin login
-
-# 3. Make sure MongoDB is running locally
-#    macOS (brew):   brew services start mongodb-community
-#    Windows:        run "MongoDB" from Services, or `mongod`
-#    Docker:         docker run -d -p 27017:27017 --name mongo mongo
-
-# 4. Seed the first admin user + default settings
-npm run seed
-
-# 5. Start the dev server
+cp .env.example .env.local   # then fill in your real values
 npm run dev
 ```
+Open http://localhost:3000
 
-Visit:
-- **Website:** http://localhost:3000
-- **Admin login:** http://localhost:3000/login (use the `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` from your `.env.local`)
+## Auth System
+- **Customers** self-register at `/register` (role is always `customer`).
+- **Admins** are not self-serve. Create the first superadmin with:
+  ```bash
+  npm run seed:admin
+  ```
+  This reads `ADMIN_EMAIL` / `ADMIN_PASSWORD` / `ADMIN_NAME` from `.env.local`
+  (or falls back to `admin@barberco.com` / `ChangeMe123`). Log in at
+  `/login` and change the password immediately — additional admins are then
+  created from the Admin Panel's Roles & Permissions module (Step 19).
+- Routes are protected by `middleware.ts`:
+  - `/dashboard/*` requires any logged-in user.
+  - `/admin/*` requires role `admin` or `superadmin`.
+- Server-side helpers `requireUser()` / `requireAdmin()` in `src/lib/session.ts`
+  guard API routes the same way — use these at the top of every protected
+  route handler.
 
-## 2. Environment Variables
-
-See `.env.example` for the full list. Key ones:
-
-| Variable | Description |
-|---|---|
-| `MONGODB_URI` | MongoDB connection string (local or Atlas) |
-| `JWT_SECRET` | Secret used to sign admin login tokens — change this in production |
-| `COOKIE_NAME` | Name of the auth cookie (default `agency_admin_token`) |
-| `NEXT_PUBLIC_SITE_NAME` | Shown in navbar, footer, and page titles |
-| `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` | Credentials created by `npm run seed` |
-
-## 3. Folder Structure
-
+## Project Structure
 ```
-app/
-  (auth)/login/          Admin login page
-  dashboard/              Protected admin pages (hero, services, projects, jobs, team, applications, messages, settings)
-  services/ projects/ jobs/ team/ about/ contact/   Public pages
-  api/                    Route handlers (auth, services, projects, jobs, team, applications, contact, hero, settings, upload)
-components/
-  common/                 Navbar, Footer, RichTextEditor, RichHtml, Modal, Loader, EmptyState, Providers
-  sections/               Hero, Services, Portfolio, WhyChooseUs, Process, Testimonials, Team, CTA, ContactForm, JobApplyForm
-  admin/                  AdminSidebar, AdminPageHeader, DataTable, ImageUploadField
-  ui/                     Button (shadcn-style)
-models/                   Mongoose schemas: User, HeroSection, Service, Project, Job, Application, Contact, Team, Testimonial, Settings
-lib/                      mongodb.ts, auth.ts, crudFactory.ts, requireAuth.ts, apiResponse.ts, getSettings.ts, getHomeData.ts
-validation/                Yup schemas per resource
-hooks/                     useCrud, useAuth
-utils/                     constants.ts, helpers.ts
-scripts/seed.ts            First-run admin + default settings seeder
-```
-
-## 4. How content editing works
-
-- Every model with a description (Hero, Service, Project, Job, Team bio, About story/mission/vision, Testimonials) stores **HTML** produced by the shared `RichTextEditor` (TipTap) component.
-- On the public site, that HTML is rendered safely through the `RichHtml` component.
-- Images (Hero banner, service icons, project images, job posters, team photos, logo) upload through `/api/upload` and are stored under `public/uploads`.
-
-## 5. Deployment
-
-### Option A — Vercel (recommended for Next.js)
-
-1. Push this repo to GitHub/GitLab/Bitbucket.
-2. Import the repo in [Vercel](https://vercel.com/new).
-3. Add the environment variables from `.env.example` in the Vercel project settings (use a MongoDB **Atlas** URI — Vercel's filesystem can't host a local Mongo instance).
-4. **Important:** Vercel's filesystem is read-only/ephemeral, so `/api/upload` (which writes to `public/uploads`) will not persist files between deployments. For production, swap the upload route to a cloud storage provider (S3, Cloudinary, UploadThing, etc.) — the route is isolated in `app/api/upload/route.ts` so this is a small change.
-5. Deploy. After the first deploy, run `npm run seed` once against your Atlas database (locally, pointing `MONGODB_URI` at Atlas) to create the admin user.
-
-### Option B — VPS / Node server
-
-```bash
-npm install
-npm run build
-npm run start   # runs on port 3000 by default
+src/
+  app/
+    (public)/     → Website: Home, Services, Gallery, Blog, etc.
+    (customer)/   → Customer dashboard (auth required)
+    (admin)/      → Admin panel (auth + role required)
+    api/          → REST API routes, one folder per resource
+  components/
+    ui/           → Reusable primitives (Button, Input, Badge, Card...)
+    shared/        → Cross-cutting components (States, DataTable, Pagination...)
+    admin/        → Admin-only components
+    customer/     → Customer-dashboard-only components
+    layout/       → Header, Footer, Sidebar, Navigation
+  lib/            → db connection, cloudinary, auth, utils
+  models/         → Mongoose schemas
+  types/          → Shared TypeScript types
+  validations/    → Zod schemas for server + client validation
+  config/         → Site-wide config (nav items, site settings)
+  hooks/          → Custom React hooks
 ```
 
-Run behind Nginx/Caddy as a reverse proxy, set environment variables on the server, and use a process manager like `pm2`:
+## Theme System
+Every color, font, radius, spacing, and shadow used anywhere in the app is
+defined once in `src/styles/globals.css` and mapped into
+`tailwind.config.ts`. To restyle the entire app, edit only that CSS file —
+never add a literal color value in a component.
 
-```bash
-pm2 start npm --name "digital-agency" -- start
-```
+## Build Plan (do not skip steps)
+1. **Project Setup & Architecture** ✅
+2. **Auth system (customer + admin, NextAuth, roles)** ✅
+3. **Database models (all entities from the spec)** ✅
+4. **Reusable DataTable (pagination + search + filter + sort + bulk actions + Active/Inactive + Approve/Reject)** ✅
+5. **Public website — Home, About, Services, Service Details** ✅
+6. **Public website — Packages, Gallery, Before/After, Barbers, Barber Profile, Pricing** ✅
+7. **Public website — Reviews, Testimonials, Blog, Blog Details, FAQ** ✅
+8. **Public website — Contact, Careers, Legal pages, Search, Sitemap, 404** ✅
+9. **Booking flow (slots, availability, booking rules)** ✅
+10. **Payment & invoice system** ✅
+11. **Customer Dashboard (all sub-pages)** ✅
+12. **Admin panel — Dashboard overview + Barber management** ✅ *(this step)*
+13. **Admin panel — Services / Packages / Categories** ✅ *(this step)*
+14. **Admin panel — Appointments** ✅ *(this step)*
+15. **Admin panel — Reviews / Testimonials / Gallery / Before-After (approve/reject)** ✅ *(this step)*
+16. **Admin panel — Blogs / CMS / FAQs / Banners** ✅ *(this step)*
+17. **Admin panel — Newsletter / Contact Messages / Email Templates** ✅ *(this step)*
+18. **Admin panel — Payments / Invoices / Expenses / Coupons / Reports** ✅ *(this step)*
+19. **Admin panel — Roles & Permissions / Settings / SEO / Theme / Activity Logs / Backups** ✅ *(this step — Admin Panel is now 100% complete)*
+20. **Notifications system + Global Search + final QA pass** ✅ *(this step — PROJECT COMPLETE)*
 
-MongoDB can run on the same VPS or as a managed Atlas cluster — either works, just update `MONGODB_URI`.
+Each step is completed fully — including pagination, search, filters, and
+active/inactive or approve/reject where applicable — before moving to the
+next.
 
-## 6. Adding a second admin/editor
+## Before Going to Production
 
-Currently the seed script creates one `superadmin`. To add more, either:
-- Insert directly into the `users` collection with a bcrypt-hashed password, or
-- Build a small "Manage Admins" page later using the same CRUD pattern as Team/Services (the `role` field is already schema-ready for `superadmin` / `admin` / `editor`).
-# SKY_WAY
-# level_up
+This codebase is feature-complete against the specification. Before a real
+launch:
+
+1. **Environment variables** — fill in every value in `.env.local` (copy from
+   `.env.example`): MongoDB URI, NextAuth secret, Cloudinary, SMTP, site URL.
+2. **Seed the first admin** — `npm run seed:admin`, then log in and change
+   the password immediately.
+3. **Set up payment methods** — go to **Admin → Website Content → Payment
+   Methods** and fill in your real bank account, EasyPaisa, and/or JazzCash
+   details. These are shown to every customer at checkout.
+4. **Populate content** — categories → services/packages → barbers (with
+   working hours) → banners/FAQs/CMS text via `/admin/cms`, in that order,
+   since later ones reference earlier ones.
+5. **Test the full loop once**: book as a customer → submit a manual payment
+   (or choose "Pay in Person") → confirm it as admin in `/admin/payments` →
+   check the appointment flips to `confirmed` in `/admin/appointments` →
+   mark it completed → leave a review as the customer → approve it as admin
+   → check it appears on the public `/reviews` page.
+6. **DNS/email deliverability** — configure SPF/DKIM for the domain in
+   `SMTP_FROM` so booking/notification emails don't land in spam.
+
+## Architecture Notes for Future Extension
+
+- Every list in the app (32+ tables across customer/admin) uses the same
+  `DataTable` + `useDataTable` + `useListData` + `buildListResponse` stack
+  from Step 4 — adding a new module means writing a model, an API route with
+  `buildListResponse`, and a table component; pagination/search/filter/sort
+  come for free.
+- `StatusToggle` and `ApproveRejectActions` are drop-in for any model with a
+  `status`/`moderationStatus` field.
+- `logActivity()` is available for any admin mutation that should appear in
+  the audit trail — currently wired into the highest-value actions
+  (role changes, barber/coupon lifecycle, review moderation) as a pattern
+  to extend.
+

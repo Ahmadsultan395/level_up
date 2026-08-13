@@ -1,60 +1,75 @@
-import type { Config } from "tailwindcss";
+import type { Config } from 'tailwindcss';
 
+// IMPORTANT: Every color below points to a CSS variable defined in
+// src/styles/globals.css. Never add a literal hex/rgb color here or
+// anywhere else in the app — change the variable in globals.css instead
+// and the entire application updates.
 const config: Config = {
-  darkMode: "class",
-  content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}"],
+  darkMode: 'class',
+  content: [
+    './src/app/**/*.{ts,tsx}',
+    './src/components/**/*.{ts,tsx}',
+  ],
   theme: {
     extend: {
       colors: {
-        primary: {
-          DEFAULT: "#4BAEE9",
-          50: "#EEF8FD",
-          100: "#D9F0FB",
-          200: "#B8E3F8",
-          300: "#8BD3F3",
-          400: "#63C2EE",
-          500: "#4BAEE9",
-          600: "#2E94D5",
-          700: "#2477AF",
-          800: "#215F8A",
-          900: "#204F70",
+        bg: {
+          primary: 'var(--color-bg-primary)',
+          secondary: 'var(--color-bg-secondary)',
+          elevated: 'var(--color-bg-elevated)',
+          overlay: 'var(--color-bg-overlay)',
         },
-        dark: {
-          DEFAULT: "#141414",
-          50: "#F5F5F5",
-          100: "#E0E0E0",
-          200: "#B3B3B3",
-          300: "#808080",
-          400: "#4D4D4D",
-          500: "#2B2B2B",
-          600: "#1F1F1F",
-          700: "#181818",
-          800: "#141414",
-          900: "#0A0A0A",
+        gold: {
+          DEFAULT: 'var(--color-gold)',
+          bright: 'var(--color-gold-bright)',
+          muted: 'var(--color-gold-muted)',
         },
-        white: "#FFFFFF",
+        text: {
+          primary: 'var(--color-text-primary)',
+          secondary: 'var(--color-text-secondary)',
+          muted: 'var(--color-text-muted)',
+          inverse: 'var(--color-text-inverse)',
+        },
+        border: {
+          DEFAULT: 'var(--color-border)',
+          strong: 'var(--color-border-strong)',
+        },
+        status: {
+          success: 'var(--color-success)',
+          successBg: 'var(--color-success-bg)',
+          danger: 'var(--color-danger)',
+          dangerBg: 'var(--color-danger-bg)',
+          warning: 'var(--color-warning)',
+          warningBg: 'var(--color-warning-bg)',
+          info: 'var(--color-info)',
+          infoBg: 'var(--color-info-bg)',
+          pending: 'var(--color-pending)',
+          pendingBg: 'var(--color-pending-bg)',
+        },
       },
       fontFamily: {
-        display: ["var(--font-display)", "sans-serif"],
-        body: ["var(--font-body)", "sans-serif"],
+        display: ['var(--font-display)'],
+        body: ['var(--font-body)'],
+        mono: ['var(--font-mono)'],
       },
       borderRadius: {
-        xl: "1rem",
-        "2xl": "1.5rem",
+        sm: 'var(--radius-sm)',
+        md: 'var(--radius-md)',
+        lg: 'var(--radius-lg)',
+        xl: 'var(--radius-xl)',
+        full: 'var(--radius-full)',
       },
-      keyframes: {
-        fadeUp: {
-          "0%": { opacity: "0", transform: "translateY(24px)" },
-          "100%": { opacity: "1", transform: "translateY(0)" },
-        },
-        marquee: {
-          "0%": { transform: "translateX(0)" },
-          "100%": { transform: "translateX(-50%)" },
-        },
+      boxShadow: {
+        sm: 'var(--shadow-sm)',
+        md: 'var(--shadow-md)',
+        lg: 'var(--shadow-lg)',
+        gold: 'var(--shadow-gold)',
       },
-      animation: {
-        fadeUp: "fadeUp 0.6s ease-out both",
-        marquee: "marquee 30s linear infinite",
+      spacing: {
+        section: 'var(--space-section)',
+      },
+      transitionDuration: {
+        DEFAULT: 'var(--transition-base)',
       },
     },
   },
