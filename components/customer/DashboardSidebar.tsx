@@ -3,59 +3,49 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Menu, X, Scissors as Logo, LogOut } from 'lucide-react';
+import { Menu, X, Scissors, LogOut } from 'lucide-react';
 import { signOut } from 'next-auth/react';
-import { ADMIN_NAV } from '@/config/admin-nav';
+import { DASHBOARD_NAV } from '@/config/dashboard-nav';
 import { cn } from '@/lib/utils';
-import { AdminGlobalSearch } from '@/components/admin/AdminGlobalSearch';
 
 function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
 
   return (
-    <nav className="flex flex-col gap-6">
-      {ADMIN_NAV.map((group) => (
-        <div key={group.label}>
-          <p className="px-3 text-xs font-medium uppercase tracking-wide text-text-muted">{group.label}</p>
-          <div className="mt-2 flex flex-col gap-1">
-            {group.items.map((item) => {
-              const active = pathname === item.href;
-              const Icon = item.icon;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={onNavigate}
-                  className={cn(
-                    'flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors',
-                    active ? 'bg-gold/10 text-gold' : 'text-text-secondary hover:bg-bg-elevated hover:text-text-primary'
-                  )}
-                >
-                  <Icon className="h-4 w-4" />
-                  {item.label}
-                </Link>
-              );
-            })}
-          </div>
-        </div>
-      ))}
+    <nav className="flex flex-col gap-1">
+      {DASHBOARD_NAV.map((item) => {
+        const active = pathname === item.href;
+        const Icon = item.icon;
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            onClick={onNavigate}
+            className={cn(
+              'flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors',
+              active ? 'bg-gold/10 text-gold' : 'text-text-secondary hover:bg-bg-elevated hover:text-text-primary'
+            )}
+          >
+            <Icon className="h-4 w-4" />
+            {item.label}
+          </Link>
+        );
+      })}
     </nav>
   );
 }
 
-export function AdminSidebar() {
+export function DashboardSidebar() {
   const [isOpen, setIsOpen] = useState(false);
 
   return (
     <>
+      {/* Desktop sidebar */}
       <aside className="hidden h-screen w-64 shrink-0 overflow-y-auto border-r border-border p-5 md:sticky md:top-0 md:block">
-        <Link href="/admin" className="flex items-center gap-2 font-display text-lg text-text-primary">
-          <Logo className="h-5 w-5 text-gold" aria-hidden="true" />
-          Admin Panel
+        <Link href="/" className="flex items-center gap-2 font-display text-lg text-text-primary">
+          <Scissors className="h-5 w-5 text-gold" aria-hidden="true" />
+          The Barber Co.
         </Link>
-        <div className="mt-4">
-          <AdminGlobalSearch />
-        </div>
         <div className="mt-8">
           <NavLinks />
         </div>
@@ -67,10 +57,11 @@ export function AdminSidebar() {
         </button>
       </aside>
 
+      {/* Mobile topbar + drawer */}
       <div className="flex items-center justify-between border-b border-border p-4 md:hidden">
-        <Link href="/admin" className="flex items-center gap-2 font-display text-lg text-text-primary">
-          <Logo className="h-5 w-5 text-gold" aria-hidden="true" />
-          Admin Panel
+        <Link href="/" className="flex items-center gap-2 font-display text-lg text-text-primary">
+          <Scissors className="h-5 w-5 text-gold" aria-hidden="true" />
+          The Barber Co.
         </Link>
         <button aria-label="Open menu" onClick={() => setIsOpen(true)} className="text-text-primary">
           <Menu className="h-6 w-6" />
@@ -89,6 +80,12 @@ export function AdminSidebar() {
             <div className="mt-6">
               <NavLinks onNavigate={() => setIsOpen(false)} />
             </div>
+            <button
+              onClick={() => signOut({ callbackUrl: '/' })}
+              className="mt-8 flex items-center gap-3 rounded-md px-3 py-2 text-sm text-text-muted hover:text-status-danger"
+            >
+              <LogOut className="h-4 w-4" /> Log out
+            </button>
           </div>
           <div className="flex-1 bg-bg-overlay" onClick={() => setIsOpen(false)} />
         </div>
