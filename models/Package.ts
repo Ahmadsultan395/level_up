@@ -1,17 +1,16 @@
 import { Schema, model, models, type Model, type Document, type Types } from 'mongoose';
 import type { VisibilityStatus } from '@/types/common';
 
-export interface IService extends Document {
+export interface IPackage extends Document {
   name: string;
   slug: string;
   description: string;
-  category: Types.ObjectId;
+  services: Types.ObjectId[];
   price: number;
   discountPrice?: number;
   durationMinutes: number;
   imageUrl?: string;
   imagePublicId?: string;
-  gallery: { url: string; publicId: string }[];
   status: VisibilityStatus;
   featured: boolean;
   order: number;
@@ -19,18 +18,17 @@ export interface IService extends Document {
   updatedAt: Date;
 }
 
-const ServiceSchema = new Schema<IService>(
+const PackageSchema = new Schema<IPackage>(
   {
     name: { type: String, required: true, trim: true },
     slug: { type: String, required: true, unique: true, lowercase: true, index: true },
     description: { type: String, required: true },
-    category: { type: Schema.Types.ObjectId, ref: 'Category', required: true, index: true },
+    services: [{ type: Schema.Types.ObjectId, ref: 'Service', required: true }],
     price: { type: Number, required: true, min: 0 },
     discountPrice: { type: Number, min: 0 },
     durationMinutes: { type: Number, required: true, min: 5 },
     imageUrl: String,
     imagePublicId: String,
-    gallery: [{ url: String, publicId: String }],
     status: { type: String, enum: ['active', 'inactive'], default: 'active', index: true },
     featured: { type: Boolean, default: false, index: true },
     order: { type: Number, default: 0 },
@@ -38,6 +36,6 @@ const ServiceSchema = new Schema<IService>(
   { timestamps: true }
 );
 
-ServiceSchema.index({ name: 'text', description: 'text' });
+PackageSchema.index({ name: 'text', description: 'text' });
 
-export const Service: Model<IService> = models.Service || model<IService>('Service', ServiceSchema);
+export const Package: Model<IPackage> = models.Package || model<IPackage>('Package', PackageSchema);

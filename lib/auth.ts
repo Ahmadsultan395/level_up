@@ -1,71 +1,74 @@
-import jwt from "jsonwebtoken";
-import bcrypt from "bcryptjs";
-import { cookies } from "next/headers";
-import { NextRequest } from "next/server";
-import { COOKIE_NAME } from "./authConstants";
+import type { AuthOptions } from 'next-auth';
+import CredentialsProvider from 'next-auth/providers/credentials';
+import { connectDB } from '@/lib/db';
+import { User } from '@/models/User';
+import { comparePassword } from '@/lib/password';
+import { loginSchema } from '@/validations/auth';
 
-// Re-exported so existing imports of COOKIE_NAME from "@/lib/auth" keep working
-// in Node.js runtime code (API routes, server components). Middleware must
-// import COOKIE_NAME from "@/lib/authConstants" directly instead - see note there.
-export { COOKIE_NAME };
+export const authOptions: AuthOptions = {
+  session: { strategy: 'jwt' },
+  pages: {
+    signIn: '/login',
+    error: '/login',
+  },
+  providers: [
+    CredentialsProvider({
+      name: 'Credentials',
+      credentials: {
+        email: { label: 'Email', type: 'email' },
+        password: { label: 'Password', type: 'password' },
+      },
+      async authorize(credentials) {
+        const parsed = loginSchema.safeParse(credentials);
+        if (!parsed.success) {
+          throw new Error('Enter a valid email and password.');
+        }
 
-const JWT_SECRET = process.env.JWT_SECRET as string;
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
+        await connectDB();
+        const user = await User.findOne({ email: parsed.data.email }).select('+password');
 
-if (!JWT_SECRET) {
-  // Fail loudly at startup instead of every sign/verify call throwing a
-  // cryptic "secretOrPrivateKey must have a value" error later.
-  throw new Error(
-    "JWT_SECRET is not set. Add it to your .env.local file and restart the dev server.",
-  );
-}
+        if (!user) {
+          throw new Error('No account found with this email.');
+        }
 
-export interface TokenPayload {
-  id: string;
-  email: string;
-  name: string;
-  role: "admin" | "editor" | "superadmin";
-}
+        if (user.status === 'inactive') {
+          throw new Error('This account has been deactivated. Contact support.');
+        }
 
-export function hashPassword(password: string) {
-  return bcrypt.hash(password, 10);
-}
+        const isValid = await comparePassword(parsed.data.password, user.password);
+        if (!isValid) {
+          throw new Error('Incorrect password.');
+        }
 
-export function comparePassword(password: string, hash: string) {
-  return bcrypt.compare(password, hash);
-}
+        user.lastLoginAt = new Date();
+        await user.save();
 
-export function signToken(payload: TokenPayload) {
-  return jwt.sign(payload, JWT_SECRET, {
-    expiresIn: JWT_EXPIRES_IN,
-  } as jwt.SignOptions);
-}
-
-export function verifyToken(token: string): TokenPayload | null {
-  try {
-    return jwt.verify(token, JWT_SECRET) as TokenPayload;
-  } catch {
-    return null;
-  }
-}
-
-/** Read current session on the server (Server Components / Route Handlers - Node.js runtime) */
-export async function getSession(): Promise<TokenPayload | null> {
-  const store = await cookies();
-  const token = store.get(COOKIE_NAME)?.value;
-  if (!token) return null;
-  return verifyToken(token);
-}
-
-/** Read session from a NextRequest (API route handlers - Node.js runtime only, NOT middleware) */
-export function getSessionFromRequest(req: NextRequest): TokenPayload | null {
-  const token = req.cookies.get(COOKIE_NAME)?.value;
-  if (!token) return null;
-  return verifyToken(token);
-}
-
-/** Roles allowed to perform a given action - extend here as roles grow */
-export function hasRole(payload: TokenPayload | null, allowed: string[]) {
-  if (!payload) return false;
-  return allowed.includes(payload.role);
-}
+        return {
+          id: user._id.toString(),
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          avatarUrl: user.avatarUrl,
+        };
+      },
+    }),
+  ],
+  callbacks: {
+    async jwt({ token, user }) {
+      if (user) {
+        token.id = user.id;
+        token.role = (user as { role: string }).role;
+        token.avatarUrl = (user as { avatarUrl?: string }).avatarUrl;
+      }
+      return token;
+    },
+    async session({ session, token }) {
+      if (session.user) {
+        session.user.id = token.id as string;
+        session.user.role = token.role as 'customer' | 'admin' | 'superadmin';
+        session.user.avatarUrl = token.avatarUrl as string | undefined;
+      }
+      return session;
+    },
+  },
+};
